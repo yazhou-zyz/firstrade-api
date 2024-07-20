@@ -4,6 +4,7 @@ import re
 
 import requests
 from bs4 import BeautifulSoup
+import pyotp
 
 from firstrade import urls
 
@@ -11,7 +12,7 @@ from firstrade import urls
 class FTSession:
     """Class creating a session for Firstrade."""
 
-    def __init__(self, username, password, pin, profile_path=None):
+    def __init__(self, username, password, pin,totp_secret, profile_path=None):
         """
         Initializes a new instance of the FTSession class.
 
@@ -27,10 +28,10 @@ class FTSession:
         self.pin = pin
         self.profile_path = profile_path
         self.session = requests.Session()
+        self.totp_secret = totp_secret  # Google Authenticator密钥
         self.login()
 
     def login(self):
-        """Method to validate and login to the Firstrade platform."""
         headers = urls.session_headers()
         cookies = self.load_cookies()
         cookies = requests.utils.cookiejar_from_dict(cookies)
@@ -53,12 +54,34 @@ class FTSession:
                 "destination_page": "home",
             }
 
-            self.session.post(
+            response = self.session.post(
                 url=urls.login(),
                 headers=headers,
                 cookies=self.session.cookies,
                 data=data,
             )
+
+            # 检查是否需要输入2FA代码
+            if "2FA" in response.text:  # 这里需要根据实际的响应内容来判断
+                totp = pyotp.TOTP(self.totp_secret)
+                two_factor_code = totp.now()
+
+                # 发送2FA验证请求
+                data = {
+                    "two_factor_code": two_factor_code,
+                    # 可能需要其他字段，根据Firstrade的实际要求添加
+                }
+                response = self.session.post(
+                    url=urls.two_factor_auth(),  # 需要定义这个URL
+                    headers=headers,
+                    cookies=self.session.cookies,
+                    data=data,
+                )
+
+                # 检查2FA验证是否成功
+                if "2FA Failed" in response.text:  # 根据实际响应修改
+                    raise Exception("Two-factor authentication failed.")
+
             data = {
                 "destination_page": "home",
                 "pin": self.pin,
@@ -72,10 +95,10 @@ class FTSession:
             )
             self.save_cookies()
         if (
-            "/cgi-bin/sessionfailed?reason=6"
-            in self.session.get(
-                url=urls.get_xml(), headers=urls.session_headers(), cookies=cookies
-            ).text
+                "/cgi-bin/sessionfailed?reason=6"
+                in self.session.get(
+            url=urls.get_xml(), headers=urls.session_headers(), cookies=cookies
+        ).text
         ):
             raise Exception("Login failed. Check your credentials.")
 

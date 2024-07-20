@@ -2,7 +2,7 @@ from firstrade import account, order, symbols
 from firstrade.order import get_orders
 
 # Create a session
-ft_ss = account.FTSession(username="", password="", pin="")
+ft_ss = account.FTSession(username="zhuyazhou177", password="Buwanle177@", pin="0910",totp_secret="NZ3SGNIOAU2AY6QC")
 
 # Get account data
 ft_accounts = account.FTAccountData(ft_ss)
